@@ -1600,6 +1600,17 @@ static bool callWaitsOnFunctionReturn(const MachineInstr &MI) {
   return true;
 }
 
+/// \returns true if \p MI is not the first terminator of its associated MBB.
+static bool checkIfMBBNonFirstTerminator(const MachineInstr &MI) {
+  const auto &MBB = MI.getParent();
+  if (MBB->getFirstTerminator() == MI)
+    return false;
+  for (const auto &I : MBB->terminators())
+    if (&I == &MI)
+      return true;
+  return false;
+}
+
 ///  Generate s_waitcnt instruction to be placed before cur_Inst.
 ///  Instructions of a given type are returned in order,
 ///  but instructions of different types can complete out of order.
@@ -1825,7 +1836,9 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(MachineInstr &MI,
   // Verify that the wait is actually needed.
   ScoreBrackets.simplifyWaitcnt(Wait);
 
-  if (ForceEmitZeroFlag)
+  // When forcing emit, we need to skip non-first terminators of a MBB because
+  // that would break the terminators of the MBB.
+  if (ForceEmitZeroFlag && !checkIfMBBNonFirstTerminator(MI))
     Wait = WCG->getAllZeroWaitcnt(/*IncludeVSCnt=*/false);
 
   if (ForceEmitWaitcnt[LOAD_CNT])
